@@ -110,7 +110,7 @@ class ConsumerThread(threading.Thread):
 class CalibrationNode:
     def __init__(self, boards, service_check = True, synchronizer = message_filters.TimeSynchronizer, flags = 0,
                  pattern=Patterns.Chessboard, camera_name='', detection='cv2', output='yaml', checkerboard_flags = 0,
-                 min_good_enough = 40):
+                 min_good_enough = 60, camera_lens_type = "pinhole"):
         if service_check:
             # assume any non-default service names have been set.  Wait for the service to become ready
             for svcname in ["camera", "left_camera", "right_camera"]:
@@ -132,6 +132,8 @@ class CalibrationNode:
         self._pattern = pattern
         self._camera_name = camera_name
         self._min_good_enough = min_good_enough
+        self._camera_lens_type = camera_lens_type
+        
         rospack = rospkg.RosPack()
         pkg_path = rospack.get_path('autoware_camera_lidar_calibrator')
         self._autoware_image = cv2.imread( path.join(pkg_path, 'docs/autoware_logo.jpg'), cv2.IMREAD_UNCHANGED)
@@ -180,11 +182,13 @@ class CalibrationNode:
                 self.c = MonoCalibrator(self._boards, self._calib_flags, self._pattern, name=self._camera_name,
                                         detection=self._detection, output = self._output,
                                         checkerboard_flags=self._checkerboard_flags,
-                                        min_good_enough = self._min_good_enough)
+                                        min_good_enough = self._min_good_enough,
+                                        camera_lens_type = self._camera_lens_type)
             else:
                 self.c = MonoCalibrator(self._boards, self._calib_flags, self._pattern, detection=self._detection,
                                         output=self._output, checkerboard_flags=self.checkerboard_flags,
-                                        min_good_enough = self._min_good_enough)
+                                        min_good_enough = self._min_good_enough,
+                                        camera_lens_type = self._camera_lens_type)
 
         # This should just call the MonoCalibrator
         drawable = self.c.handle_msg(msg)

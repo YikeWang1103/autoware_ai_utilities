@@ -272,7 +272,7 @@ class Calibrator(object):
     """
 
     def __init__(self, boards, flags=0, pattern=Patterns.Chessboard, name='', detection='cv2', output='yaml',
-                 checkerboard_flags=cv2.CALIB_CB_FAST_CHECK, min_good_enough=40):
+                 checkerboard_flags=cv2.CALIB_CB_FAST_CHECK, min_good_enough=40, camera_lens_type='pinhole'):
         # Ordering the dimensions for the different detectors is actually a minefield...
         if pattern == Patterns.Chessboard:
             # Make sure n_cols > n_rows to agree with OpenCV CB detector output
@@ -291,6 +291,7 @@ class Calibrator(object):
         self.pattern = pattern
         self.br = cv_bridge.CvBridge()
         self.min_good_enough = min_good_enough
+        self.camera_lens_type = camera_lens_type
 
         # self.db is list of (parameters, image) samples for use in calibration. parameters has form
         # (X, Y, size, skew) all normalized to [0,1], to keep track of what sort of samples we've taken
@@ -491,10 +492,15 @@ class Calibrator(object):
         """ Used by :meth:`as_message`.  Return a CameraInfo message for the given calibration matrices """
         msg = sensor_msgs.msg.CameraInfo()
         (msg.width, msg.height) = self.size
-        if d.size > 5:
-            msg.distortion_model = "rational_polynomial"
+
+        if self.camera_lens_type == "fisheye":
+            msg.distortion_model = "fisheye_model"
         else:
-            msg.distortion_model = "plumb_bob"
+            if d.size > 5:
+                msg.distortion_model = "rational_polynomial"
+            else:
+                msg.distortion_model = "plumb_bob"
+
         msg.D = numpy.ravel(d).copy().tolist()
         msg.K = numpy.ravel(k).copy().tolist()
         msg.R = numpy.ravel(r).copy().tolist()
@@ -543,6 +549,7 @@ class Calibrator(object):
         assert len(calmessage) < 525, "Calibration info must be less than 525 bytes"
         return calmessage
 
+    # to do: add fisheye for distortion_model
     def lryaml(self, name, d, k, r, p):
         calmessage = (""
                       + "image_width: " + str(self.size[0]) + "\n"
@@ -670,18 +677,31 @@ class MonoCalibrator(Calibrator):
         opts = self.mk_object_points(boards)
 
         self.intrinsics = numpy.zeros((3, 3), numpy.float64)
-        if self.calib_flags & cv2.CALIB_RATIONAL_MODEL:
-            self.distortion = numpy.zeros((8, 1), numpy.float64)  # rational polynomial
+
+        if self.camera_lens_type == "fisheye":
+            self.distortion = numpy.zeros((4,1), numpy.float64) # fisheye model: k1, k2, k3, k4
+
+            cv2.fisheye.calibrate(
+                opts, ipts,
+                self.size, self.intrinsics,
+                self.distortion,
+                flags=self.calib_flags,
+                criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_COUNT, 30, 1e-6)
+            )
+
         else:
-            self.distortion = numpy.zeros((5, 1), numpy.float64)  # plumb bob
-        # If FIX_ASPECT_RATIO flag set, enforce focal lengths have 1/1 ratio
-        self.intrinsics[0, 0] = 1.0
-        self.intrinsics[1, 1] = 1.0
-        cv2.calibrateCamera(
-            opts, ipts,
-            self.size, self.intrinsics,
-            self.distortion,
-            flags=self.calib_flags)
+            if self.calib_flags & cv2.CALIB_RATIONAL_MODEL:
+                self.distortion = numpy.zeros((8, 1), numpy.float64)  # rational polynomial
+            else:
+                self.distortion = numpy.zeros((5, 1), numpy.float64)  # plumb bob
+            # If FIX_ASPECT_RATIO flag set, enforce focal lengths have 1/1 ratio
+            self.intrinsics[0, 0] = 1.0
+            self.intrinsics[1, 1] = 1.0
+            cv2.calibrateCamera(
+                opts, ipts,
+                self.size, self.intrinsics,
+                self.distortion,
+                flags=self.calib_flags)
 
         # R is identity matrix for monocular calibration
         self.R = numpy.eye(3, dtype=numpy.float64)
@@ -704,8 +724,13 @@ class MonoCalibrator(Calibrator):
         for j in range(3):
             for i in range(3):
                 self.P[j, i] = ncm[j, i]
-        self.mapx, self.mapy = cv2.initUndistortRectifyMap(self.intrinsics, self.distortion, self.R, ncm, self.size,
-                                                           cv2.CV_32FC1)
+
+        if self.camera_lens_type == "fisheye":
+            self.mapx, self.mapy = cv2.fisheye.initUndistortRectifyMap(self.intrinsics, self.distortion, self.R, ncm, self.size,
+                                                            cv2.CV_32FC1)
+        else:
+            self.mapx, self.mapy = cv2.initUndistortRectifyMap(self.intrinsics, self.distortion, self.R, ncm, self.size,
+                                                            cv2.CV_32FC1)
 
     def remap(self, src):
         """
@@ -724,7 +749,12 @@ class MonoCalibrator(Calibrator):
         Apply the post-calibration undistortion to the source points
         """
 
-        return cv2.undistortPoints(src, self.intrinsics, self.distortion, R=self.R, P=self.P)
+        if self.camera_lens_type == "fisheye":
+            pts = cv2.fisheye.undistortPoints(src, self.intrinsics, self.distortion, R=self.R, P=self.P)
+        else:
+            pts = cv2.undistortPoints(src, self.intrinsics, self.distortion, R=self.R, P=self.P)
+
+        return pts
 
     def as_message(self):
         """ Return the camera calibration as a CameraInfo message """
