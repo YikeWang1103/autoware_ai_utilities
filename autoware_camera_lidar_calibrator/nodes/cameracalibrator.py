@@ -71,6 +71,9 @@ def main():
     parser.add_option("-d", "--detection",
                      type="string", default="cv2",
                      help="Chessboard detection algorithm, OpenCV2 or Matlab (python matlab engine) - 'cv2', 'matlab'")
+    group.add_option("--camera_lens_type",
+                     type="string", default="pinhole",
+                     help="choose camera lens type: pinhole or fisheye")
     group = OptionGroup(parser, "Chessboard Options",
                         "You must specify one or more chessboards as pairs of --size and --square options.")
     group.add_option("-p", "--pattern",
@@ -185,7 +188,8 @@ def main():
 
     rospy.init_node('cameracalibrator')
     node = OpenCVCalibrationNode(boards, options.service_check, sync, calib_flags, pattern, options.camera_name,
-                                 options.detection, options.output, min_good_enough=options.min_samples, checkerboard_flags=checkerboard_flags)
+                                 options.detection, options.output, min_good_enough=options.min_samples, checkerboard_flags=checkerboard_flags,
+                                 camera_lens_type=options.camera_lens_type)
     rospy.spin()
 
 if __name__ == "__main__":
