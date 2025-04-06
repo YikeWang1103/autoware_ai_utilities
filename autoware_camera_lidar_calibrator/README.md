@@ -41,7 +41,7 @@ This node additionally supports the Matlab engine for chessboard detection, whic
 1. Run `python setup.py install` to setup Matlab bindings.
 
 To use this engine, add `--detection matlab` to the list of arguments, i.e.\
-`rosrun autoware_camera_lidar_calibrator cameracalibrator.py --detection matlab --square SQUARE_SIZE --size MxN image:=/image_topic`
+`rosrun autoware_camera_lidar_calibrator cameracalibrator.py --detection matlab --square SQUARE_SIZE --size MxN --camera_lens_type fisheye image:=/image_topic`
 
 ![Calibration](docs/camera_calibration.jpg "Autoware camera calibration")
 
