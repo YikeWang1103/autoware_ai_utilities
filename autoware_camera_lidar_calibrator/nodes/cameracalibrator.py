@@ -71,7 +71,7 @@ def main():
     parser.add_option("-d", "--detection",
                      type="string", default="cv2",
                      help="Chessboard detection algorithm, OpenCV2 or Matlab (python matlab engine) - 'cv2', 'matlab'")
-    group.add_option("--camera_lens_type",
+    parser.add_option("--camera_lens_type",
                      type="string", default="pinhole",
                      help="choose camera lens type: pinhole or fisheye")
     group = OptionGroup(parser, "Chessboard Options",
